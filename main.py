@@ -1,111 +1,181 @@
-import json, time, asyncio, base64
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-api_id = 22410897
-api_hash = "a746b342a0fab522229835892ead0942"
-PREFIX = "."
+# ===================== CONFIG =====================
+API_ID = 22410897          # isi dari my.telegram.org
+API_HASH = "a746b342a0fab522229835892ead0942"    # isi dari my.telegram.org
+BOT_TOKEN = "8071451055:AAGEhOgfjv343wpVcE3sRpMM-ZW1CFU0OSE"  # bot Telegram
 
-app = Client("ubot_full", api_id=api_id, api_hash=api_hash)
+# ===================== INIT =======================
+bot = Client("bot_client", bot_token=BOT_TOKEN)
+userbot = Client("user_client", api_id=API_ID, api_hash=API_HASH)
 
-# ================= DB =================
+login_data = {}  # simpan nomor + code_hash sementara
 
-DBF="db.json"
-try:
-    db=json.load(open(DBF))
-except:
-    db={
-        "auto":False,
-        "afk":False,
-        "afk_text":"AFK",
-        "notes":{},
-        "targets":[],
-        "share_text":"test"
-    }
-    json.dump(db,open(DBF,"w"))
-
-def save():
-    json.dump(db,open(DBF,"w"),indent=2)
-
-# ================= PANEL =================
-
-def main_panel():
+# ===================== PANEL / MENU ====================
+def panel_main():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("TOOLS","m_tools"),
-         InlineKeyboardButton("GROUP","m_group")],
-        [InlineKeyboardButton("SHARE","m_share"),
-         InlineKeyboardButton("SYSTEM","m_sys")],
-        [InlineKeyboardButton("Close","close")]
+        [
+            InlineKeyboardButton("🛠 Tools", "menu_tools"),
+            InlineKeyboardButton("👥 Group", "menu_group")
+        ],
+        [
+            InlineKeyboardButton("📢 Share", "menu_share"),
+            InlineKeyboardButton("⚙️ System", "menu_system")
+        ],
+        [
+            InlineKeyboardButton("❌ Logout", "menu_close")
+        ]
     ])
 
-def back():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅ BACK","back")]])
+def panel_back():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅ Back", "menu_back")]
+    ])
 
-@app.on_message(filters.me & filters.command("menu", PREFIX))
-async def menu(_,m):
-    await m.edit("📦 UBOT FULL PANEL", reply_markup=main_panel())
+def panel_tools():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(".ping", "noop"),
+            InlineKeyboardButton(".time", "noop"),
+            InlineKeyboardButton(".id", "noop")
+        ],
+        [
+            InlineKeyboardButton(".b64", "noop"),
+            InlineKeyboardButton(".rev", "noop"),
+            InlineKeyboardButton(".calc", "noop")
+        ],
+        [InlineKeyboardButton("⬅ Back", "menu_back")]
+    ])
 
-@app.on_callback_query()
-async def cb(_,q):
-    d=q.data
+def panel_group():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(".tagall", "noop"),
+            InlineKeyboardButton(".purge", "noop")
+        ],
+        [
+            InlineKeyboardButton(".pin", "noop"),
+            InlineKeyboardButton(".kick", "noop")
+        ],
+        [InlineKeyboardButton("⬅ Back", "menu_back")]
+    ])
 
-    if d=="close":
-        return await q.message.delete()
+def panel_share():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(".addtarget", "noop"),
+            InlineKeyboardButton(".setshare", "noop")
+        ],
+        [
+            InlineKeyboardButton(".share", "noop"),
+            InlineKeyboardButton(".targets", "noop")
+        ],
+        [InlineKeyboardButton("⬅ Back", "menu_back")]
+    ])
 
-    if d=="back":
-        return await q.message.edit("📦 UBOT FULL PANEL", reply_markup=main_panel())
+def panel_system():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(".auto on/off", "noop"),
+            InlineKeyboardButton(".afk", "noop")
+        ],
+        [
+            InlineKeyboardButton(".note", "noop"),
+            InlineKeyboardButton(".notes", "noop")
+        ],
+        [InlineKeyboardButton("⬅ Back", "menu_back")]
+    ])
 
-    if d=="m_tools":
-        return await q.message.edit("""
-TOOLS
-.ping .say .edit
-.time .id .info
-.b64 .db64
-.rev .upper .lower
-.calc
-""", reply_markup=back())
+# ===================== BOT HANDLER ====================
+@bot.on_message(filters.private & filters.command("start"))
+async def start(client, message):
+    await message.reply(
+        "👋 Selamat datang! Klik tombol login untuk userbot:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔑 Login Userbot", "login_userbot")]
+        ])
+    )
 
-    if d=="m_group":
-        return await q.message.edit("""
-GROUP
-.tagall
-.purge
-.pin
-.unpin
-.kick (reply)
-""", reply_markup=back())
+# ===================== CALLBACK ====================
+@bot.on_callback_query()
+async def cb(client, query):
+    data = query.data
 
-    if d=="m_share":
-        return await q.message.edit("""
-SHARE
-.addtarget
-.deltarget
-.setshare
-.share
-.targets
-""", reply_markup=back())
+    # LOGIN FLOW
+    if data == "login_userbot":
+        await query.message.edit("Masukkan nomor Telegram (contoh: +6281234567890):")
+        bot.add_handler(filters.private & filters.text, input_number, group=1)
+        await query.answer()
+        return
 
-    if d=="m_sys":
-        return await q.message.edit("""
-SYSTEM
-.auto on/off
-.afk
-.unafk
-.note
-.get
-.notes
-""", reply_markup=back())
+    # PANEL MENU
+    if data == "menu_close":
+        await query.message.edit("Userbot logout!")
+        await userbot.stop()
+        return
 
-# ================= TOOLS =================
+    if data == "menu_back":
+        await query.message.edit("📦 **UBOT PANEL**", reply_markup=panel_main())
+        return
 
-@app.on_message(filters.me & filters.command("ping", PREFIX))
-async def ping(_,m): await m.edit("🏓 pong")
+    if data == "menu_tools":
+        await query.message.edit("🛠 TOOLS MENU", reply_markup=panel_tools())
+        return
 
-@app.on_message(filters.me & filters.command("say", PREFIX))
-async def say(_,m):
-    t=m.text.split(maxsplit=1)
-    if len(t)>1: await m.edit(t[1])
+    if data == "menu_group":
+        await query.message.edit("👥 GROUP MENU", reply_markup=panel_group())
+        return
 
+    if data == "menu_share":
+        await query.message.edit("📢 SHARE MENU", reply_markup=panel_share())
+        return
+
+    if data == "menu_system":
+        await query.message.edit("⚙️ SYSTEM MENU", reply_markup=panel_system())
+        return
+
+    if data == "noop":
+        await query.answer("Command ini harus diketik manual 👍", show_alert=True)
+        return
+
+# ===================== LOGIN HANDLER =================
+async def input_number(client, message):
+    phone = message.text.strip()
+    try:
+        async with userbot:
+            code = await userbot.send_code(phone)
+        login_data["phone"] = phone
+        login_data["code_hash"] = code.phone_code_hash
+        await message.reply(f"Nomor diterima: {phone}\nSilakan kirim OTP yang dikirim Telegram.")
+        bot.add_handler(filters.private & filters.text, input_otp, group=2)
+        bot.remove_handler(input_number, group=1)
+    except Exception as e:
+        await message.reply(f"❌ Gagal kirim kode OTP: {e}")
+
+async def input_otp(client, message):
+    otp = message.text.strip()
+    phone = login_data.get("phone")
+    code_hash = login_data.get("code_hash")
+    if not phone or not code_hash:
+        await message.reply("Error: nomor belum diterima atau kode OTP tidak tersedia.")
+        return
+    try:
+        async with userbot:
+            await userbot.sign_in(phone_number=phone, phone_code_hash=code_hash, code=otp)
+        await message.reply("✅ Userbot login sukses! Panel aktif.", reply_markup=panel_main())
+    except Exception as e:
+        await message.reply(f"❌ Login gagal: {e}")
+    bot.remove_handler(input_otp, group=2)
+
+# ===================== RUN BOT ======================
+async def main():
+    await bot.start()
+    print("Bot Telegram berjalan... Tunggu user login OTP.")
+    await asyncio.get_event_loop().create_future()  # keep alive
+
+asyncio.run(main())
 @app.on_message(filters.me & filters.command("edit", PREFIX))
 async def edit(_,m):
     if m.reply_to_message:
